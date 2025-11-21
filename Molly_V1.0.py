@@ -1,159 +1,120 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
-# IF YOU DON'T HAVE THOSE LIBRARIES PLEASE RUN PIP STATEMENTS IN THE COMMENT SECTION BELOW
-'''
-!pip install -q -U google-generativeai    
-!pip install speechrecognition openai pyttsx3 pyaudio pygame
-!pip install setuptools
-'''
-
-
-# In[ ]:
-
-
 import google.generativeai as genai
 import speech_recognition as sr
 import pyttsx3
-import os
-import pyaudio
-from datetime import date
-import time
-# for OpenAi TTS model you can use
-from openai import OpenAi
 import pygame
+import time
+from datetime import date, datetime
+from openai import OpenAi
+
 client = OpenAi()
+pygame.mixer.init()
 
-
-# In[ ]:
-
-
-pygame.mixeer.init()
-today = str(date.today())
+# Initialize TTS engine (pyttsx3)
 engine = pyttsx3.init()
-engine.setproperty('rate',190)
-voices = engine.getproperty('voices')
-engine.setproperty('voice',voices[1].id)# if you want to change it into a male voice replace 1 by 0
+engine.setProperty('rate', 190)
+voices = engine.getProperty('voices')
+engine.setProperty('voice', voices[1].id)  # 1 for female voice, 0 for male
 
+# Initialize Gemini Pro model
+model = genai.GenerativeModel('gemini-pro')
+use_openai_tts = True  # Switch this to False to use pyttsx3 locally
 
-# In[ ]:
-
-
-model=genai.GenerativeModel('gemini-pro')
-openaitts = True
-
-
-# In[ ]:
-
+def append2log(text):
+    today = date.today().isoformat()
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    fname = f'chatlog-{today}.txt'
+    with open(fname, "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {text}\n")
 
 def speak(text):
-    global openaitts
-    if openaitts:
+    if use_openai_tts:
         response = client.audio.speech.create(
-        model='tts-1',
-        voice='nove' # you can replace nova by alloy to switch to a male voice 
-        input=text    
+            model='tts-1',
+            voice='nove',  # use 'alloy' for male voice if preferred
+            input=text
         )
         fname = 'output.mp3'
-        mp3file = open(fname,'w+')
-        response.write_to_file(fname)
+        with open(fname, 'wb') as mp3file:
+            response.write_to_file(mp3file)
         try:
-            pygame.mixer.music.load(mp3file)
+            pygame.mixer.music.load(fname)
             pygame.mixer.music.play()
-            while(pygame.mixer.music.get_busy()):
-                time.sleep(0.25)
+            while pygame.mixer.music.get_busy():
+                time.sleep(0.1)
             pygame.mixer.music.stop()
-            mp3file.close()
-            
         except KeyboardInterrupt:
             pygame.mixer.music.stop()
-            mp3file.close()
     else:
         engine.say(text)
         engine.runAndWait()
 
-
-# In[ ]:
-
-
-talk=[]
-
-
-# In[ ]:
-
-
-def append2log(text):
-    global today
-    fname = 'chatlog-'+today+'.txt'
-    with open(fname,"a")as f:
-        f.write(text+:"\n")
-
-
-# In[ ]:
-
-
 def main():
-    global talk, today, model
     rec = sr.Recognizer()
     mic = sr.Microphone()
     rec.dynamic_energy_threshold = False
     rec.energy_threshold = 400
     sleeping = True
-    while(1):
-        with mic as source1:
-            rec.adjust_for_ambient_noise(source1, duration=0.5)
-            print("listening...")
-            
+    talk = []
+
+    print("Starting Molly AI Assistant. Say 'Molly' to wake me up.")
+
+    while True:
+        with mic as source:
+            rec.adjust_for_ambient_noise(source, duration=0.5)
+            print("Listening...")
+
             try:
-                audio = rec.listen(source1, timeout=10, phrase_time_limit = 15)
+                audio = rec.listen(source, timeout=10, phrase_time_limit=15)
                 text = rec.recognize_google(audio)
-                if sleeping == True:
-                    if "molly" in text.lower():
-                        request = text.lower().split("molly")[1]
+                print(f"Recognized: {text}")
+
+                lower_text = text.lower()
+
+                if sleeping:
+                    if "molly" in lower_text:
+                        request = lower_text.split("molly", 1)[1].strip()
                         sleeping = False
-                        append2log(f"_"*40)
-                        talk=[]
-                        today = str(date.today)
-                        
-                        if len(request) <5:
+                        append2log("_" * 40)
+                        talk = []
+                        if len(request) < 5:
                             speak("Hi, how can I help you?")
-                            append2log(f"AI:Hi, how can I help you? \n")
-                            continue 
-                    else :
+                            append2log("AI: Hi, how can I help you?")
+                            continue
+                    else:
                         continue
                 else:
-                    request = text.lower()
-                    
-                    if "that's all" in request:
-                        append2log(f"you:{request} \n")
-                        speak("Bye")
-                        append2log(f"AI:Bye. \n")
-                        print("Bye")
+                    request = lower_text
+                    if "that's all" in request or "goodbye" in request:
+                        append2log(f"You: {request}")
+                        speak("Goodbye!")
+                        append2log("AI: Goodbye.")
+                        print("Goodbye!")
                         sleeping = True
-                        # AI goes back to sleep
                         continue
+
                     if "molly" in request:
-                        request = request.split("molly")[1]
-                append2log(f"you:{request} \n")
-                print(f"you:{request}\n AI: ")
-                talk.append({'role':'user', 'parts':[request]})
-                response = model.generate_content(talk,stream=True)
+                        request = request.split("molly", 1)[1].strip()
+
+                append2log(f"You: {request}")
+                print(f"You: {request}\nAI: ", end='')
+
+                talk.append({'role': 'user', 'parts': [request]})
+                response = model.generate_content(talk, stream=True)
+
+                full_response = ""
                 for chunk in response:
                     print(chunk.text, end='')
-                    speak(chunk.text.replace("*",""))
-                    print('\n')
-                    talk.append({'role':'model','parts':[response.text]})
-                    append2log(f"AI:{response.text} \n")
-                except Exception as e:
-                    continue
+                    full_response += chunk.text.replace("*", "")
 
+                print('\n')
+                speak(full_response)
 
-# In[ ]:
+                talk.append({'role': 'model', 'parts': [full_response]})
+                append2log(f"AI: {full_response}")
 
+            except Exception as e:
+                print(f"Error: {e}")
+                continue
 
 if __name__ == "__main__":
     main()
-
