@@ -98,5 +98,3 @@ Use Molly for productivity, accessibility, creative experiments, or just for fun
   <img src="https://forthebadge.com/images/badges/built-with-love.svg" alt="Built with Love">
   <img src="https://forthebadge.com/images/badges/powered-by-coffee.svg" alt="Powered by Coffee">
 </p>
-<p align="center"><img src="./img_molly_talking.png" alt="Molly Talking" width="250"></p>
-
